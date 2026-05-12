@@ -457,7 +457,7 @@ nav{
     <div class="nav-tab" onclick="alert('Catatan tersimpan akan segera hadir!')">📚 Catatan Saya</div>
   </div>
   <div class="nav-right">
-    <div class="status-pill"><div class="status-dot"></div>Gemini / Claude API</div>
+    <div class="status-pill"><div class="status-dot"></div>Gemini 2.0 Flash ✓</div>
     <div class="nav-avatar">AB</div>
   </div>
 </nav>
@@ -586,7 +586,7 @@ nav{
   <div>
     <div class="rp-label">⚙️ Konfigurasi Model</div>
     <div class="param-card">
-      <div class="prow"><span class="pk">Model</span><span class="pv acc">Sonnet 4</span></div>
+      <div class="prow"><span class="pk">Model</span><span class="pv acc">Gemini 2.0</span></div>
       <div class="prow"><span class="pk">Temperature</span><span class="pv">0.6</span></div>
       <div class="prow"><span class="pk">Max Tokens</span><span class="pv">1,000</span></div>
       <div class="prow"><span class="pk">Top-P</span><span class="pv">0.9</span></div>
@@ -929,16 +929,22 @@ async function sendMsg() {
   showTyping();
 
   try {
-    const tools = wsOn ? [{type:'web_search_20250305',name:'web_search'}] : undefined;
-    const body = {
-      model:'claude-sonnet-4-20250514',
-      max_tokens:1000,
-      system:SP,
-      messages:history
-    };
-    if(tools) body.tools = tools;
+    const geminiMessages = history.map(m=>({
+      role: m.role==='assistant' ? 'model' : 'user',
+      parts:[{text: m.content}]
+    }));
 
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
+    const body = {
+      system_instruction:{parts:[{text:SP}]},
+      contents: geminiMessages,
+      generationConfig:{
+        temperature:0.6,
+        maxOutputTokens:1000,
+        topP:0.9
+      }
+    };
+
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBG7DaJ7pZo5KZzEWSexksJar3qlUmQsWY`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)
@@ -949,14 +955,9 @@ async function sendMsg() {
     let reply = '';
     let sources = [];
 
-    if(data.content && data.content.length){
-      data.content.forEach(block=>{
-        if(block.type==='text') reply += block.text;
-        if(block.type==='tool_result' || (block.type==='web_search_result')){
-          try { sources.push(JSON.parse(block.content||'{}').title || 'Web'); } catch(e){}
-        }
-      });
-      if(!reply) reply = '✅ Saya telah mencari informasi terbaru untuk menjawab pertanyaanmu!';
+    if(data.candidates && data.candidates.length){
+      reply = data.candidates[0]?.content?.parts?.[0]?.text || '';
+      if(!reply) reply = '✅ Respons diterima dari Gemini AI!';
     } else if(data.error) {
       reply = `⚠️ Error API: ${data.error.message}`;
     } else {
